@@ -47,8 +47,12 @@ class Touei:
         self.password = password
         # Trạng thái đăng nhập
         self.authenticated = self.__authentication(username, password)
-
+        
+    def __del__(self):
+        self.browser.quit()
+        
     def __authentication(self, username: str, password: str) -> bool:
+        time.sleep(0.5)
         self.browser.get('https://sk.touei.co.jp/')
         try:
             self.wait.until(
@@ -66,8 +70,11 @@ class Touei:
                     (By.CSS_SELECTOR, "input[name='login']"),
                 ),
             ).click()
+            if not hasattr(self,"authenticated") or not self.authenticated:
+                self.logger.info('✅ Đăng nhập thành công!')
             return True
-        except Exception:
+        except Exception as e:
+            self.logger.error(f'❌ Đăng nhập thất bại! {e}.')
             return False
 
     def __switch_bar(self, bar: str) -> bool:
@@ -82,7 +89,8 @@ class Touei:
         except Exception:
             return False
         
-    def timeline(self,id:str,job:str) -> dict | None:
+    def get_schedule(self,id:str,job:str) -> dict | None:
+        self.__authentication(self.username,self.password)
         self.__switch_bar("▼ 工程表")
         schedule = {}
         try:
@@ -118,7 +126,10 @@ class Touei:
             koteihyo_area_goto_areas = koteihyo_area.find_elements(By.CSS_SELECTOR,"div[class='goto_area']")
             for no_stage, stage in enumerate(koteihyo_area_goto_areas):
                 # koteihyo_area_goto_area_one_day_area là danh sách các job trong ngày hôm đó
-                koteihyo_area_goto_area_one_day_areas: list[WebElement] = stage.find_elements(By.CSS_SELECTOR,"div[class='one_day_area   ']")
+                koteihyo_area_goto_area_one_day_areas: list[WebElement] = stage.find_elements(
+                    By.CSS_SELECTOR,
+                    "div[class='one_day_area   '],div[class='one_day_area kokaiHaniBack  '],div[class='one_day_area   today'],div[class='one_day_area  unKokaiHaniBack ']"
+                )
                 for index,koteihyo_area_goto_area_one_day_area in enumerate(koteihyo_area_goto_area_one_day_areas):
                     try:
                         found_job = koteihyo_area_goto_area_one_day_area.find_element(By.CSS_SELECTOR,f"span[title='{job}']")
@@ -131,10 +142,10 @@ class Touei:
                         break
                     except NoSuchElementException:
                         continue
-
+            self.logger.info(f'✅ Lấy Timeline: {id} Job:{job} thành công!')
             return schedule
         except Exception as e:
-            self.logger.error(e)
+            self.logger.error(f'❌ Lấy timeline: {id} Job:{job} thất bại! {e}')
             return None
             
             

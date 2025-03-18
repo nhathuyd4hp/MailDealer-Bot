@@ -5,6 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.keys import Keys
 
 class WebAccess:
@@ -34,7 +35,10 @@ class WebAccess:
         self.password = password
         # Trạng thái đăng nhập
         self.authenticated = self.__authentication(username, password)
-               
+        
+    def __del__(self):
+        self.browser.quit()
+        
     def __authentication(self,username:str,password:str) -> bool:
         try:
             self.browser.get("https://webaccess.nsk-cad.com")
@@ -47,9 +51,10 @@ class WebAccess:
             self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"button[class='btn login']"))
             ).click()
+            self.logger.info('✅ Đăng nhập thành công!')
             return True
         except Exception as e:
-            self.logger.error(e)
+            self.logger.error(f'❌ Đăng nhập thất bại! {e}.')
             return False
     def __switch_tab(self,tab:str) -> bool:
         try:
@@ -91,53 +96,65 @@ class WebAccess:
                     (By.CSS_SELECTOR,"button[type='submit']")
                 )
             ).click()
-            time.sleep(1)
-            self.wait.until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR,"input[id='checkAll']")
+            try:
+                time.sleep(5)
+                self.wait.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH,"//td[text()='検索結果はありません']")
+                    )
                 )
-            ).click()
-            
-            if not fields:
+                self.logger.warning(f'❌ Building:{building_id} không có dữ liệu')
+                return pd.DataFrame(columns=fields)
+            except TimeoutException:
+                time.sleep(1)
                 self.wait.until(
                     EC.presence_of_element_located(
                         (By.CSS_SELECTOR,"input[id='checkAll']")
                     )
                 ).click()
-            else:
-                for field in fields:
-                    xpath = f"//label[text()='{field}']//input[@type='checkbox']"
+                
+                
+                if not fields:
                     self.wait.until(
                         EC.presence_of_element_located(
-                            (By.XPATH,xpath)
+                            (By.CSS_SELECTOR,"input[id='checkAll']")
                         )
                     ).click()
-                
-                
-            data_tables = self.wait.until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR,"div[class='dataTables_scroll']")
+                else:
+                    for field in fields:
+                        xpath = f"//label[text()='{field}']//input[@type='checkbox']"
+                        self.wait.until(
+                            EC.presence_of_element_located(
+                                (By.XPATH,xpath)
+                            )
+                        ).click()
+                    
+                    
+                data_tables = self.wait.until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR,"div[class='dataTables_scroll']")
+                    )
                 )
-            )
-            # Columns            
-            dataTables_scrollHead = data_tables.find_element(By.CSS_SELECTOR,"div[class='dataTables_scrollHead']")
-            spans = dataTables_scrollHead.find_elements(By.TAG_NAME,'span')
-            columns = [span.text for span in spans]
+                # Columns            
+                dataTables_scrollHead = data_tables.find_element(By.CSS_SELECTOR,"div[class='dataTables_scrollHead']")
+                spans = dataTables_scrollHead.find_elements(By.TAG_NAME,'span')
+                columns = [span.text for span in spans]
 
-            df = pd.DataFrame(columns=columns)
-            # Row
-            dataTables_scrollBody = data_tables.find_element(By.CSS_SELECTOR,"div[class='dataTables_scrollBody']")
-            dataTables_scrollBody_tbody = dataTables_scrollBody.find_element(By.TAG_NAME,'tbody')
-            dataTables_scrollBody_tbody_trs = dataTables_scrollBody_tbody.find_elements(By.TAG_NAME,'tr')
-            for tr in dataTables_scrollBody_tbody_trs:
-                tds = tr.find_elements(By.TAG_NAME,'td')
-                row = [td.text for td in tds][1:]
-                df.loc[len(df)] = row  
-            return df
+                df = pd.DataFrame(columns=columns)
+                # Row
+                dataTables_scrollBody = data_tables.find_element(By.CSS_SELECTOR,"div[class='dataTables_scrollBody']")
+                dataTables_scrollBody_tbody = dataTables_scrollBody.find_element(By.TAG_NAME,'tbody')
+                dataTables_scrollBody_tbody_trs = dataTables_scrollBody_tbody.find_elements(By.TAG_NAME,'tr')
+                for tr in dataTables_scrollBody_tbody_trs:
+                    tds = tr.find_elements(By.TAG_NAME,'td')
+                    row = [td.text for td in tds][1:]
+                    df.loc[len(df)] = row  
+                self.logger.info(f'✅ Lấy dữ liệu Building:{building_id} thành công')
+                return df
         
         except Exception as e:
             self.logger.error(e)
-            return pd.DataFrame()
+            return pd.DataFrame(columns=fields)
             
         
 

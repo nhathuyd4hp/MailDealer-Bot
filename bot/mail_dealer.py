@@ -1,7 +1,7 @@
-import os
 import time
 import logging
 from typing import Union
+import pandas as pd
 from functools import wraps
 from selenium import webdriver
 from selenium import webdriver
@@ -61,7 +61,8 @@ class MailDealer:
         self.authenticated = self.__authentication(username, password)
         
     def __del__(self):
-        self.browser.quit()
+        if hasattr(self,"browser"):
+            self.browser.quit()
         
     @switch_to_default_content
     def __authentication(self, username: str, password: str) -> bool:
@@ -110,19 +111,19 @@ class MailDealer:
             self.logger.error(f'❌ Đăng nhập thất bại! {e}.')
             return False
 
-    def __extract_infomation(self, tbody: WebElement) -> dict:
-        td_elements = tbody.find_elements(
-            by=By.TAG_NAME,
-            value='td',
-        )
-        id = td_elements[2].find_element(By.TAG_NAME, 'span').text
-        subject = tbody.find_element(
-            By.CSS_SELECTOR, "span[id='subject']",
-        ).text
-        return {
-            'id': id,
-            'subject': subject,
-        }
+    # def __extract_infomation(self, tbody: WebElement) -> dict:
+    #     td_elements = tbody.find_elements(
+    #         by=By.TAG_NAME,
+    #         value='td',
+    #     )
+    #     id = td_elements[2].find_element(By.TAG_NAME, 'span').text
+    #     subject = tbody.find_element(
+    #         By.CSS_SELECTOR, "span[id='subject']",
+    #     ).text
+    #     return {
+    #         'id': id,
+    #         'subject': subject,
+    #     }
 
     @login_required
     @switch_to_default_content
@@ -176,67 +177,97 @@ class MailDealer:
 
     @login_required
     @switch_to_default_content
-    def get_mails(self, mail_box: str, tab_name: Union[str, None] = None):
-        self.__open_mail_box(mail_box, tab_name)
-        time.sleep(2)
-        if not self.wait.until(
-            EC.frame_to_be_available_and_switch_to_it(
-                (By.CSS_SELECTOR, "iframe[id='ifmMain']"),
-            ),
-        ):
-            self.logger.error("Không thể tìm thấy Content Iframe")
-            return []
+    def mailbox(self, mail_box: str, tab_name: Union[str, None] = None) -> pd.DataFrame | None:
         try:
-            self.wait.until(
-                EC.presence_of_element_located(
-                    (By.XPATH,"//div[text()='条件に一致するデータがありません。']")
+            self.__open_mail_box(mail_box, tab_name)
+            time.sleep(2)
+            if not self.wait.until(
+                EC.frame_to_be_available_and_switch_to_it(
+                    (By.CSS_SELECTOR, "iframe[id='ifmMain']"),
+                ),
+            ):
+                self.logger.error(f'❌ Không thể tìm thấy Content Iframe!.')
+                return None
+            try:
+                self.wait.until(
+                    EC.presence_of_element_located(
+                        (By.XPATH,"//div[text()='条件に一致するデータがありません。']")
+                    )
                 )
-            )
-            return []
-        except:
-            tbody_elements = self.browser.find_elements(
-                by=By.TAG_NAME,
-                value='tbody',
-            )
-            return [self.__extract_infomation(email) for email in tbody_elements]
-        
-        
-        
-
+                self.logger.info(f'✅ Hộp thư: {mail_box} rỗng')
+                return pd.DataFrame()
+            except:
+                thead = self.wait.until(
+                    EC.presence_of_element_located(
+                        (By.TAG_NAME,'thead')
+                    )
+                )
+                labels = thead.find_elements(By.TAG_NAME,'th')
+                # Lọc lấy các thẻ label
+                columns = []
+                index_value = []
+                for index,label in enumerate(labels):
+                    if label.find_elements(By.XPATH, "./*"):
+                        columns.append(label.text)
+                        index_value.append(index)
+                df = pd.DataFrame(columns=columns)               
+                tbodys = self.wait.until(
+                    EC.presence_of_all_elements_located(
+                        (By.TAG_NAME,'tbody')
+                    )
+                )
+                for tbody in tbodys:
+                    row = []
+                    values:list[WebElement] = tbody.find_elements(By.TAG_NAME,"td")
+                    values:list[WebElement] = [values[index] for index in index_value]
+                    for value in values:
+                        row.append(value.text)
+                    df.loc[len(df)] = row
+                return df
+        except Exception as e:    
+            self.logger.error(f'❌ Không thể lấy được danh sách mail: {mail_box}, tab: {tab_name}: {e}')
+            return None
+            
+    
     @login_required
-    def read_mail(self, mail_box: str,mail_id:str) -> str:
-        content = ""
-        if not self.browser.current_url.startswith('https://md29.maildealer.jp/app/'):
-            self.__authentication(self.username, self.password)
-        self.__open_mail_box(
-            mail_box=mail_box,
-        )
-        self.wait.until(
-            EC.frame_to_be_available_and_switch_to_it(
-                (By.CSS_SELECTOR, "iframe[id='ifmMain']"),
-            ),
-        )
-        email_span = self.wait.until(
-            EC.presence_of_element_located((By.XPATH,f"//span[text()='{mail_id}']"))
-        )
-        email_span.click()
+    def read_mail(self, mail_box: str,mail_id:str,tab_name:str=None) -> str:
         try:
+            content = ""
+            if not self.browser.current_url.startswith('https://md29.maildealer.jp/app/'):
+                self.__authentication(self.username, self.password)
+            self.__open_mail_box(
+                mail_box=mail_box,
+                tab=tab_name,
+            )
             self.wait.until(
-                EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR,"iframe[id='html-mail-body-if']"))
+                EC.frame_to_be_available_and_switch_to_it(
+                    (By.CSS_SELECTOR, "iframe[id='ifmMain']"),
+                ),
             )
-            ps = self.wait.until(
-                EC.presence_of_all_elements_located((By.TAG_NAME,'p'))
+            email_span = self.wait.until(
+                EC.presence_of_element_located((By.XPATH,f"//span[text()='{mail_id}']"))
             )
-            for p in ps:
-                content += p.text + "\n"
-        except TimeoutException:
-            body = self.wait.until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR,"div[class='olv-p-mail-view-body']")
+            email_span.click()
+            try:
+                self.wait.until(
+                    EC.frame_to_be_available_and_switch_to_it((By.CSS_SELECTOR,"iframe[id='html-mail-body-if']"))
                 )
-            )
-            content = body.find_element(By.TAG_NAME,'pre').text
-        return content
+                ps = self.wait.until(
+                    EC.presence_of_all_elements_located((By.TAG_NAME,'p'))
+                )
+                for p in ps:
+                    content += p.text + "\n"
+            except TimeoutException:
+                body = self.wait.until(
+                    EC.presence_of_element_located(
+                        (By.CSS_SELECTOR,"div[class='olv-p-mail-view-body']")
+                    )
+                )
+                content = body.find_element(By.TAG_NAME,'pre').text
+            self.logger.info(f'✅ Đã đọc được nội dung mail:{mail_id} ở box:{mail_box}')
+            return content
+        except Exception as e:
+            self.logger.error(f'❌ Dọc nội dung mail:{mail_id} ở {mail_box} thất bại: {e}')
             
     
 __all__ = [MailDealer]
