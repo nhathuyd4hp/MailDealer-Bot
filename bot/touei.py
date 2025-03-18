@@ -108,7 +108,7 @@ class Touei:
             # ----- #
             schedules:list[WebElement] = self.browser.find_elements(By.CSS_SELECTOR,"input[value='工程表']")
             if len(schedules) != 1:
-                self.logger.warning("No building found or multiple buildings found.")
+                self.logger.warning(f"❌ Không tìm thấy construction: {id} hoặc tìm thấy nhiều hơn 1")
                 return None
             time.sleep(1)
             schedules[0].click()
@@ -148,5 +148,11 @@ class Touei:
             self.logger.error(f'❌ Lấy timeline: {id} Job:{job} thất bại! {e}')
             return None
             
-            
-__all__ = [Touei]
+touei = Touei(
+    username="c0032",
+    password="nsk159753",
+    headless=True,
+    logger=logging.getLogger('Touei'),
+)     
+       
+__all__ = [touei]

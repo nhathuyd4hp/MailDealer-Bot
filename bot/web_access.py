@@ -70,7 +70,7 @@ class WebAccess:
             self.logger.error(e)
             return False
         
-    def get_information(self,building_id:str,fields:list[str] = None) -> pd.DataFrame:
+    def get_information(self,construction_id:str,fields:list[str] = None) -> pd.DataFrame:
         try:
             self.__switch_tab("受注一覧")
             self.wait.until(
@@ -89,7 +89,7 @@ class WebAccess:
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR,"input[name='search_construction_no']")
                 )
-            ).send_keys(building_id)
+            ).send_keys(construction_id)
             
             self.wait.until(
                 EC.presence_of_element_located(
@@ -103,7 +103,7 @@ class WebAccess:
                         (By.XPATH,"//td[text()='検索結果はありません']")
                     )
                 )
-                self.logger.warning(f'❌ Building:{building_id} không có dữ liệu')
+                self.logger.warning(f'❌ Building:{construction_id} không có dữ liệu')
                 return pd.DataFrame(columns=fields)
             except TimeoutException:
                 time.sleep(1)
@@ -149,7 +149,7 @@ class WebAccess:
                     tds = tr.find_elements(By.TAG_NAME,'td')
                     row = [td.text for td in tds][1:]
                     df.loc[len(df)] = row  
-                self.logger.info(f'✅ Lấy dữ liệu Building:{building_id} thành công')
+                self.logger.info(f'✅ Lấy dữ liệu Building:{construction_id} thành công')
                 return df
         
         except Exception as e:
@@ -157,6 +157,14 @@ class WebAccess:
             return pd.DataFrame(columns=fields)
             
         
+web_access = WebAccess(
+    username="2909",
+    password="159753",
+    headless=True,
+    logger=logging.getLogger('WebAccess'),
+)
+
+__all__ = [web_access]
 
         
     

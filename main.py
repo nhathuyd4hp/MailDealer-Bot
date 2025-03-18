@@ -1,14 +1,10 @@
 from __future__ import annotations
-from datetime import datetime
-import re
-import os
-import logging
 import concurrent.futures
-import itertools
+import re
+import logging
+import concurrent
 import pandas as pd
-from bot import MailDealer
-from bot import Touei
-from bot import WebAccess
+from bot import mail_dealer,touei,web_access
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,9 +34,9 @@ def process_schedu_email_content(content:str) -> list[str]:
             department, project_count = None, 0
         project_ids = re.findall(building_regex, building)
         return {
-            "department": department,
-            "project_count": project_count,
-            "project_ids": project_ids
+            "construction": department,
+            "quantity": project_count,
+            "details": project_ids
         }
         
     matches = split_raw_buildings(content)
@@ -50,40 +46,12 @@ def process_schedu_email_content(content:str) -> list[str]:
     return buildings
 
 
-    
-file_path = 'result.xlsx'
-
-process_building = ["仙台施工","郡山施工","浜松施工","東海施工","関西施工","岡山施工","広島施工","福岡施工","熊本施工","東京施工","神奈川施工"]
-
-fields=['確定納期', '案件番号', '物件名','配送先住所']
-
-mail_dealer = MailDealer(
-    username='vietnamrpa',
-    password='nsk159753',
-    headless=True,
-    timeout=5,
-    logger=logging.getLogger('MailDealer'),
-)
-
-# touei= Touei(
-#     username="c0032",
-#     password="nsk159753",
-#     headless=True,
-#     logger=logging.getLogger('Touei'),
-# )
-
-# web_access = WebAccess(
-#     username="2909",
-#     password="159753",
-#     headless=True,
-#     logger=logging.getLogger('WebAccess'),
-# )
-
-MAX_THREAD = 5    
-
+MAX_THREAD = 5
 TAB_NAME = "すべて"
-
 MAIL_BOX = '専用アドレス・飯田GH/≪ベトナム納期≫東栄(FAX・メール)'
+JOB = "鋼製野縁"
+FIELDS = ['確定納期', '案件番号', '物件名','配送先住所']
+PROCESS_CONSTRUCTIONS = ["仙台施工","郡山施工","浜松施工","東海施工","関西施工","岡山施工","広島施工","福岡施工","熊本施工","東京施工","神奈川施工"]
 
 def main():
     mailbox: pd.DataFrame = mail_dealer.mailbox(
@@ -92,16 +60,33 @@ def main():
     )   
     # Lọc các mail có cột '件名' bắt đầu bằng "【東栄住宅】 工程表更新のお知らせ"
     mailbox = mailbox[mailbox['件名'].str.startswith("【東栄住宅】 工程表更新のお知らせ", na=False)]
-    # 
+    # Loop
     for ID in mailbox['ID'].to_list():
         content = mail_dealer.read_mail(
             mail_box=MAIL_BOX,
             mail_id=ID,
             tab_name=TAB_NAME,
         )
-        buildings = process_schedu_email_content(content)
-        print("OK")
+        constructions:list[dict] = process_schedu_email_content(content)
+        # Chỉ lấy các element có key construction nằm trong PROCESS_CONSTRUCTIONS cần xử lí
+        constructions:list[dict] = [item for item in constructions if any(keyword in item.get("construction", "") for keyword in PROCESS_CONSTRUCTIONS)]
+        # Lấy các constructions_id cần xử lí
+        construction_ids = [detail for construction in constructions for detail in construction.get("details", [])]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            for id in construction_ids:
+                future_timeline = executor.submit(touei.get_schedule, id=id, job=JOB)
+                future_information = executor.submit(web_access.get_information, construction_id=id, fields=FIELDS)
+                timeline = future_timeline.result()
+                information = future_information.result()
+    
+            
+            print("OK")
     
 
-if __name__ == '__main__':    
-    main()
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        del touei
+        del web_access
+        del mail_dealer

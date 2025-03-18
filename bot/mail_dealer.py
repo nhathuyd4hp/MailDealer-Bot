@@ -264,10 +264,16 @@ class MailDealer:
                     )
                 )
                 content = body.find_element(By.TAG_NAME,'pre').text
-            self.logger.info(f'✅ Đã đọc được nội dung mail:{mail_id} ở box:{mail_box}')
+            self.logger.info(f'✅ Đã đọc được nội dung mail:{mail_id}. tab: {tab_name} ở box:{mail_box}')
             return content
         except Exception as e:
             self.logger.error(f'❌ Dọc nội dung mail:{mail_id} ở {mail_box} thất bại: {e}')
             
-    
-__all__ = [MailDealer]
+mail_dealer = MailDealer(
+    username='vietnamrpa',
+    password='nsk159753',
+    timeout=5,
+    logger=logging.getLogger('MailDealer'),
+)
+
+__all__ = [mail_dealer]
