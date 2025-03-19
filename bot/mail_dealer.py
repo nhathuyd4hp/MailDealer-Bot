@@ -5,7 +5,7 @@ import pandas as pd
 from functools import wraps
 from selenium import webdriver
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException,NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
@@ -54,6 +54,7 @@ class MailDealer:
         self.logger = logger
         self.browser = webdriver.Chrome(options=options)
         self.browser.maximize_window()
+        self.timeout = timeout
         self.wait = WebDriverWait(self.browser, timeout)
         self.username = username
         self.password = password
@@ -66,6 +67,7 @@ class MailDealer:
         
     @switch_to_default_content
     def __authentication(self, username: str, password: str) -> bool:
+        time.sleep(0.5)
         self.browser.get('https://md29.maildealer.jp/')
         try:
             username_field = self.wait.until(
@@ -78,6 +80,11 @@ class MailDealer:
             )
             password_field.send_keys(password)
 
+            self.wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "input[value='ログイン']"),
+                ),
+            )
             login_btn = self.wait.until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, "input[value='ログイン']"),
@@ -95,35 +102,14 @@ class MailDealer:
                 )
                 return False
             except TimeoutException:
-                pass
-
-            config_btn = self.wait.until(
-                EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "button[title='設定']"),
-                ),
-            )
-            config_btn.click()
-            time.sleep(0.5)
-            config_btn.click()
-            self.logger.info('✅ Đăng nhập thành công!')
-            return True
+                if self.browser.current_url.find("app") != -1:
+                    self.logger.info('✅ Đăng nhập thành công!')
+                    return True
+                return False
         except Exception as e:
             self.logger.error(f'❌ Đăng nhập thất bại! {e}.')
             return False
 
-    # def __extract_infomation(self, tbody: WebElement) -> dict:
-    #     td_elements = tbody.find_elements(
-    #         by=By.TAG_NAME,
-    #         value='td',
-    #     )
-    #     id = td_elements[2].find_element(By.TAG_NAME, 'span').text
-    #     subject = tbody.find_element(
-    #         By.CSS_SELECTOR, "span[id='subject']",
-    #     ).text
-    #     return {
-    #         'id': id,
-    #         'subject': subject,
-    #     }
 
     @login_required
     @switch_to_default_content
@@ -207,7 +193,7 @@ class MailDealer:
                 columns = []
                 index_value = []
                 for index,label in enumerate(labels):
-                    if label.find_elements(By.XPATH, "./*"):
+                    if label.find_elements(By.XPATH, "./*") and label.text:
                         columns.append(label.text)
                         index_value.append(index)
                 df = pd.DataFrame(columns=columns)               
@@ -222,7 +208,8 @@ class MailDealer:
                     values:list[WebElement] = [values[index] for index in index_value]
                     for value in values:
                         row.append(value.text)
-                    df.loc[len(df)] = row
+                    df.loc[len(df)] = row                   
+                self.logger.info(f'✅ Lấy hộp thư: {mail_box}, tab: {tab_name}: thành công')
                 return df
         except Exception as e:    
             self.logger.error(f'❌ Không thể lấy được danh sách mail: {mail_box}, tab: {tab_name}: {e}')
@@ -268,7 +255,54 @@ class MailDealer:
             return content
         except Exception as e:
             self.logger.error(f'❌ Dọc nội dung mail:{mail_id} ở {mail_box} thất bại: {e}')
-            
+    @login_required
+    def 一括操作(self,案件ID:any,このメールと同じ親番号のメールをすべて関連付ける:bool=False) -> bool | str:
+        try:
+            popup = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='pop-panel__content']"))
+            )
+            input = popup.find_element(By.ID,'fMatterID_add')
+            button = input.find_element(By.XPATH, "./ancestor::*[1]//button")
+            このメールと同じ親番号のメールをすべて関連付ける_div = popup.find_element(
+                By.XPATH,f"//div[text()='このメールと同じ親番号のメールをすべて関連付ける']"
+            )
+            div_checkbox = このメールと同じ親番号のメールをすべて関連付ける_div.find_element(By.XPATH, "./ancestor::*[1]//div")
+            div_input = このメールと同じ親番号のメールをすべて関連付ける_div.find_element(By.XPATH, "./ancestor::*[1]//input")
+            time.sleep(0.5)
+            if div_input.is_selected() != このメールと同じ親番号のメールをすべて関連付ける:
+                time.sleep(0.5)
+                div_checkbox.click()
+            time.sleep(1)
+            input.clear()
+            input.send_keys(案件ID)       
+            time.sleep(1)
+            button.click()
+            try:
+                snackbar_div = self.wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='snackbar__msg']"))
+                )
+                return snackbar_div.text
+            except TimeoutError:
+                return True     
+        except TimeoutException as e:
+            button = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR,"button[title='一括操作']"))
+            )
+            button = self.wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[title='一括操作']"))   
+            )
+            button.click()
+            return self.一括操作(
+                案件ID=案件ID,
+                このメールと同じ親番号のメールをすべて関連付ける=このメールと同じ親番号のメールをすべて関連付ける,
+            )
+        except NoSuchElementException as e:
+            self.logger.error(f'❌ Đánh dấu {案件ID} thất bại(NoSuchElementException): {e}')
+            return False
+        except Exception as e:
+            self.logger.error(f'❌ Đánh dấu {案件ID} thất bại: {e}')
+            return False
+        
 mail_dealer = MailDealer(
     username='vietnamrpa',
     password='nsk159753',
