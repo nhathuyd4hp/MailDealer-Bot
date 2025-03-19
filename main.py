@@ -5,7 +5,8 @@ import logging
 import concurrent
 import pandas as pd
 import datetime
-from bot import mail_dealer,touei,web_access
+from bot import MailDealer,Touei,WebAccess
+from bot import touei
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,13 +47,32 @@ def process_schedu_email_content(content:str) -> list[str]:
         buildings.append(building)
     return buildings
 
-TAB_NAME = "新着"
+TAB_NAME = "すべて"
 MAIL_BOX = '専用アドレス・飯田GH/≪ベトナム納期≫東栄(FAX・メール)'
-JOB = "鋼製野縁"
+TASK = "鋼製野縁"
 FIELDS = ['確定納期', '案件番号', '物件名','配送先住所']
 PROCESS_CONSTRUCTIONS = ["仙台施工","郡山施工","浜松施工","東海施工","関西施工","岡山施工","広島施工","福岡施工","熊本施工","東京施工","神奈川施工"]
 
 def main():
+    touei = Touei(
+        username="c0032",
+        password="nsk159753",
+        headless=True,
+        logger=logging.getLogger('Touei'),
+    ) 
+    mail_dealer = MailDealer(
+        username='vietnamrpa',
+        password='nsk159753',
+        timeout=5,
+        logger=logging.getLogger('MailDealer'),
+    )
+    web_access = WebAccess(
+        username="2909",
+        password="159753",
+        headless=True,
+        logger=logging.getLogger('WebAccess'),
+    )
+    
     logger = logging.getLogger("Main")
     
     mailbox: pd.DataFrame = mail_dealer.mailbox(
@@ -60,21 +80,16 @@ def main():
         tab_name = TAB_NAME,
     )   
     # Chuyển cột 日付 thành datetime "%y/%m/%d %H:%M"
-    mailbox['日付'] = mailbox['日付'].apply(lambda x: datetime.datetime.strptime(x, "%y/%m/%d %H:%M"))
+    mailbox["日付"] = pd.to_datetime(mailbox["日付"], format="%y/%m/%d %H:%M", errors="coerce")
     # Lọc các mail có cột '件名' bắt đầu bằng "【東栄住宅】 工程表更新のお知らせ"
     mailbox = mailbox[mailbox['件名'].str.startswith("【東栄住宅】 工程表更新のお知らせ", na=False)]
     # Chỉ xử lí các mail hôm nay
     mailbox = mailbox[mailbox['日付'].dt.date == datetime.date.today()]  
     # Result
-    result = pd.DataFrame({
-        "案件番号": pd.Series(dtype="float64"),
-        "物件名": pd.Series(dtype="object"),
-        "CODE": pd.Series(dtype="int64"),
-        "NOUKI TOEUI": pd.Series(dtype="object"),
-        "NOUKI WEBACCESS": pd.Series(dtype="object"),
-        "NOUKI DIFF": pd.Series(dtype="float64"),
-        "RESULT": pd.Series(dtype="object"),
-    })
+    result = pd.DataFrame(
+        columns=['案件番号','物件名','CODE','NOUKI TOEUI','NOUKI WEBACCESS','NOUKI DIFF','RESULT'],
+        dtype=object,
+    )
     # Duyệt từng Mail
     for ID in mailbox['ID'].to_list():
         content = mail_dealer.read_mail(
@@ -87,14 +102,18 @@ def main():
         constructions:list[dict] = [item for item in constructions if any(keyword in item.get("construction", "") for keyword in PROCESS_CONSTRUCTIONS)]
         # Lấy các constructions_id cần xử lí
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            all_details = [construction_id for construction in constructions for construction_id in construction.get("details", [])]
-            print(f"len(all_details): {len(all_details)}")
-            for construction in constructions:
+            for construction in constructions[3:]:
                 for construction_id in construction.get("details"):
-                    future_timeline = executor.submit(touei.get_schedule, id=construction_id, job=JOB)
+                    future_timeline = executor.submit(touei.get_schedule, construction_id=construction_id, task=TASK)
                     future_information = executor.submit(web_access.get_information, construction_id=construction_id, fields=FIELDS)
                     job_timeline = future_timeline.result()
                     web_access_information = future_information.result()
+                    if job_timeline == None:
+                        result.loc[len(result)] = [None,None,construction_id,None,None,None,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở TOEUI"]
+                        continue
+                    if web_access_information.empty:
+                        result.loc[len(result)] = [None,None,construction_id,None,None,None,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở WEB ACCESS"]
+                        continue
                     if construction.get("construction").startswith("東京施工"):
                         # Nếu địa chỉ trong access (cột 配送先住所) không chứa 1 trong những giá trị này ignore_region thì result ghi: vùng không cần làm-> bot không làm các bước tiếp theo
                         ignore_region = ['甲府市、','富士吉田市、','都留市、',"山梨市、",'大月市、',"韮崎市、","南アルプス市、","北杜市、","甲斐市、","笛吹市、","上野原市、","甲州市、","中央市"]
@@ -120,37 +139,29 @@ def main():
                                     web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
                                     result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,"IGNORE"]
                             continue
-                    result_一括操作 = mail_dealer.一括操作(
-                        案件ID=construction_id,
-                        このメールと同じ親番号のメールをすべて関連付ける=True,
-                    )
-                    for index, row in web_access_information.iterrows():
-                        touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
-                        web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
-                        result.loc[len(result)] = [
-                            row['案件番号'],
-                            row['物件名'],
-                            construction_id,
-                            touei_endtime.strftime("%Y-%m-%d"),
-                            web_access_endtime.strftime("%Y-%m-%d"),
-                            web_access_endtime-touei_endtime,
-                            result_一括操作,
-                        ]
+                    for 案件番号 in web_access_information['案件番号']:
+                        result_一括操作 = mail_dealer.一括操作(
+                            案件ID=案件番号,
+                            このメールと同じ親番号のメールをすべて関連付ける=True,
+                        )
+                        for index, row in web_access_information.iterrows():
+                            touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
+                            web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
+                            result.loc[len(result)] = [
+                                案件番号,
+                                row['物件名'],
+                                construction_id,
+                                touei_endtime.strftime("%Y-%m-%d"),
+                                web_access_endtime.strftime("%Y-%m-%d"),
+                                web_access_endtime-touei_endtime,
+                                result_一括操作,
+                            ]
     result.drop_duplicates(inplace=True)
     result.to_excel("output.xlsx",index=False)
     logger.info("Kết quả: output.xlsx")
-                        
-                    
-                        
-                        
-
-            
     
-
 if __name__ == '__main__':
-    try:
-        main()
-    except KeyboardInterrupt:
-        del touei
-        del web_access
-        del mail_dealer
+    main()
+    
+        
+        

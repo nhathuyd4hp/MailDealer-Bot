@@ -16,7 +16,8 @@ def style_to_day(style:str) -> int | None:
         width_expression = width_match.group(1)
         length_match = re.findall(r"\d+", width_expression)
         width = int(length_match[0])
-        return int((width + 15) / 77)
+        duration = int((width + 15) / 77)
+        return duration - 1
     except:
         return None
 
@@ -89,7 +90,7 @@ class Touei:
         except Exception:
             return False
         
-    def get_schedule(self,id:str,job:str) -> dict | None:
+    def get_schedule(self,construction_id:str,task:str) -> dict | None:
         self.__authentication(self.username,self.password)
         self.__switch_bar("▼ 工程表")
         schedule = {}
@@ -97,7 +98,7 @@ class Touei:
             id_field = self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"input[name='genbaCode']"))
             )
-            id_field.send_keys(id)
+            id_field.send_keys(construction_id)
             search_btn = self.wait.until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR,"input[id='search']")
                 )
@@ -108,7 +109,7 @@ class Touei:
             # ----- #
             schedules:list[WebElement] = self.browser.find_elements(By.CSS_SELECTOR,"input[value='工程表']")
             if len(schedules) != 1:
-                self.logger.warning(f"❌ Không tìm thấy construction: {id} hoặc tìm thấy nhiều hơn 1")
+                self.logger.warning(f"❌ Không tìm thấy construction: {construction_id} hoặc tìm thấy nhiều hơn 1")
                 return None
             time.sleep(1)
             schedules[0].click()
@@ -132,7 +133,7 @@ class Touei:
                 )
                 for index,koteihyo_area_goto_area_one_day_area in enumerate(koteihyo_area_goto_area_one_day_areas):
                     try:
-                        found_job = koteihyo_area_goto_area_one_day_area.find_element(By.CSS_SELECTOR,f"span[title='{job}']")
+                        found_job = koteihyo_area_goto_area_one_day_area.find_element(By.CSS_SELECTOR,f"span[title='{task}']")
                         job_duration = style_to_day(found_job.get_attribute("style"))
                         start_date = datetime.strptime(timeline[index].get_attribute('title'), "%Y/%m/%d")
                         schedule[no_stage+1] = {
@@ -142,17 +143,15 @@ class Touei:
                         break
                     except NoSuchElementException:
                         continue
-            self.logger.info(f'✅ Lấy Timeline: {id} Job:{job} thành công!')
+            if schedule == {}:
+                self.logger.info(f"Không có task:{task} trong Construction:{construction_id}")
+                return None
+            self.logger.info(f'✅ Lấy timeline: {construction_id} task:{task} thành công!')
             return schedule
         except Exception as e:
-            self.logger.error(f'❌ Lấy timeline: {id} Job:{job} thất bại! {e}')
+            self.logger.error(f'❌ Lấy timeline: {construction_id} task:{task} thất bại! {e}')
             return None
             
-touei = Touei(
-    username="c0032",
-    password="nsk159753",
-    headless=True,
-    logger=logging.getLogger('Touei'),
-)     
+    
        
-__all__ = [touei]
+__all__ = [Touei]

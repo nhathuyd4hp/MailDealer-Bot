@@ -157,14 +157,9 @@ class WebAccess:
             return pd.DataFrame(columns=fields)
             
         
-web_access = WebAccess(
-    username="2909",
-    password="159753",
-    headless=True,
-    logger=logging.getLogger('WebAccess'),
-)
 
-__all__ = [web_access]
+
+__all__ = [WebAccess]
 
         
     

@@ -174,6 +174,20 @@ class MailDealer:
             ):
                 self.logger.error(f'❌ Không thể tìm thấy Content Iframe!.')
                 return None
+            thead = self.wait.until(
+                EC.presence_of_element_located(
+                    (By.TAG_NAME,'thead')
+                )
+            )
+            labels = thead.find_elements(By.TAG_NAME,'th')
+            # Lọc lấy các thẻ label
+            columns = []
+            index_value = []
+            for index,label in enumerate(labels):
+                if label.find_elements(By.XPATH, "./*") and label.text:
+                    columns.append(label.text)
+                    index_value.append(index)
+            df = pd.DataFrame(columns=columns)  
             try:
                 self.wait.until(
                     EC.presence_of_element_located(
@@ -181,22 +195,8 @@ class MailDealer:
                     )
                 )
                 self.logger.info(f'✅ Hộp thư: {mail_box} rỗng')
-                return pd.DataFrame()
-            except:
-                thead = self.wait.until(
-                    EC.presence_of_element_located(
-                        (By.TAG_NAME,'thead')
-                    )
-                )
-                labels = thead.find_elements(By.TAG_NAME,'th')
-                # Lọc lấy các thẻ label
-                columns = []
-                index_value = []
-                for index,label in enumerate(labels):
-                    if label.find_elements(By.XPATH, "./*") and label.text:
-                        columns.append(label.text)
-                        index_value.append(index)
-                df = pd.DataFrame(columns=columns)               
+                return df
+            except:             
                 tbodys = self.wait.until(
                     EC.presence_of_all_elements_located(
                         (By.TAG_NAME,'tbody')
@@ -276,13 +276,13 @@ class MailDealer:
             input.clear()
             input.send_keys(案件ID)       
             time.sleep(1)
-            button.click()
+            # button.click()
             try:
                 snackbar_div = self.wait.until(
                     EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='snackbar__msg']"))
                 )
                 return snackbar_div.text
-            except TimeoutError:
+            except TimeoutException:
                 return True     
         except TimeoutException as e:
             button = self.wait.until(
@@ -303,11 +303,5 @@ class MailDealer:
             self.logger.error(f'❌ Đánh dấu {案件ID} thất bại: {e}')
             return False
         
-mail_dealer = MailDealer(
-    username='vietnamrpa',
-    password='nsk159753',
-    timeout=5,
-    logger=logging.getLogger('MailDealer'),
-)
 
-__all__ = [mail_dealer]
+__all__ = [MailDealer]
