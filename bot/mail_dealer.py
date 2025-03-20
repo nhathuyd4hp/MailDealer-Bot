@@ -39,7 +39,7 @@ class MailDealer:
         password: str,
         timeout: int = 10,
         headless:bool=False,
-        logger: logging.Logger = logging.getLogger(__name__),
+        logger_name: str = __name__,
     ):
         options = webdriver.ChromeOptions()
         options.add_argument('--disable-notifications')
@@ -51,7 +51,7 @@ class MailDealer:
         if headless: 
             options.add_argument('--headless=new')
         # Attribute
-        self.logger = logger
+        self.logger = logging.getLogger(logger_name)
         self.browser = webdriver.Chrome(options=options)
         self.browser.maximize_window()
         self.timeout = timeout

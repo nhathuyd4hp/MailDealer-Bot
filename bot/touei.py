@@ -50,7 +50,8 @@ class Touei:
         self.authenticated = self.__authentication(username, password)
         
     def __del__(self):
-        self.browser.quit()
+        if hasattr(self,"browser"):
+            self.browser.quit()
         
     def __authentication(self, username: str, password: str) -> bool:
         time.sleep(0.5)
