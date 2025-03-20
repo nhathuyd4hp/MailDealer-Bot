@@ -1,4 +1,4 @@
-from __future__ import annotations
+import sys
 import concurrent.futures
 import re
 import logging
@@ -54,25 +54,29 @@ TASK = "鋼製野縁"
 FIELDS = ['確定納期', '案件番号', '物件名','配送先住所']
 PROCESS_CONSTRUCTIONS = ["仙台施工","郡山施工","浜松施工","東海施工","関西施工","岡山施工","広島施工","福岡施工","熊本施工","東京施工","神奈川施工"]
 
-def main():
+def run(outputFile:str,timeout:int=10,headless:bool=False):
     touei = Touei(
         username="c0032",
         password="nsk159753",
-        headless=True,
-        logger=logging.getLogger('Touei'),
+        headless=headless,
+        timeout=timeout,
+        logger_name="Touei",
     ) 
+    web_access = WebAccess(
+        username="2909",
+        password="159753",
+        headless=headless,
+        timeout=timeout,
+        logger_name="WebAccess",
+    )
     mail_dealer = MailDealer(
         username='vietnamrpa',
         password='nsk159753',
-        timeout=5,
-        logger=logging.getLogger('MailDealer'),
+        headless=headless,
+        timeout=timeout,
+        logger_name="MailDealer",
     )
-    web_access = WebAccess( 
-        username="2909",
-        password="159753",
-        headless=True,
-        logger=logging.getLogger('WebAccess'),
-    )
+
     
     logger = logging.getLogger("Main")
     
@@ -88,7 +92,7 @@ def main():
     mailbox = mailbox[mailbox['日付'].dt.date == datetime.date.today()]  
     # Result
     result = pd.DataFrame(
-        columns=['案件番号','物件名','CODE','NOUKI TOEUI','NOUKI WEBACCESS','NOUKI DIFF','RESULT'],
+        columns=['案件番号','物件名','CODE','NOUKI TOEUI','NOUKI WEBACCESS','NOUKI DIFF','RESULT',"NOTE"],
         dtype=object,
     )
     # Duyệt từng Mail
@@ -110,10 +114,10 @@ def main():
                     job_timeline = future_timeline.result()
                     web_access_information = future_information.result()
                     if job_timeline == None:
-                        result.loc[len(result)] = [None,None,construction_id,None,None,None,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở TOEUI"]
+                        result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở TOEUI"]
                         continue
                     if web_access_information.empty:
-                        result.loc[len(result)] = [None,None,construction_id,None,None,None,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở WEB ACCESS"]
+                        result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở WEB ACCESS"]
                         continue
                     if construction.get("construction").startswith("東京施工"):
                         # Nếu địa chỉ trong access (cột 配送先住所) không chứa 1 trong những giá trị này ignore_region thì result ghi: vùng không cần làm-> bot không làm các bước tiếp theo
@@ -121,24 +125,32 @@ def main():
                         配送先住所:list = web_access_information['配送先住所'].to_list()
                         if not any(region in address for region in ignore_region for address in 配送先住所):
                             if web_access_information.empty:
-                                result.loc[len(result)] = [None,None,construction_id,None,None,None,"IGNORE"]
+                                result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"IGNORE"]
                             else:
                                 for index, row in web_access_information.iterrows():
                                     touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
-                                    web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
-                                    result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,"IGNORE"]
+                                    web_access_endtime = None
+                                    try:
+                                        web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
+                                    except Exception:
+                                        pass
+                                    result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,False,"IGNORE"]
                             continue
                     if construction.get("construction").startswith("神奈川施工"):
                         ignore_region = ['静岡県']
                         配送先住所:list = web_access_information['配送先住所'].to_list()
                         if not any(region in address for region in ignore_region for address in 配送先住所):
                             if web_access_information.empty:
-                                result.loc[len(result)] = [None,None,construction_id,None,None,None,"IGNORE"]
+                                result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"IGNORE"]
                             else:
                                 for index, row in web_access_information.iterrows():
                                     touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
-                                    web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
-                                    result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,"IGNORE"]
+                                    web_access_endtime = None
+                                    try:
+                                        web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
+                                    except Exception:
+                                        pass
+                                    result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,False,"IGNORE"]
                             continue
                     for 案件番号 in web_access_information['案件番号']:
                         result_一括操作 = mail_dealer.一括操作(
@@ -147,22 +159,31 @@ def main():
                         )
                         for index, row in web_access_information.iterrows():
                             touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
-                            web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
+                            web_access_endtime = None
+                            try:
+                                web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
+                            except Exception:
+                                pass
                             result.loc[len(result)] = [
                                 案件番号,
                                 row['物件名'],
                                 construction_id,
                                 touei_endtime.strftime("%Y-%m-%d"),
-                                web_access_endtime.strftime("%Y-%m-%d"),
-                                web_access_endtime-touei_endtime,
-                                result_一括操作,
+                                web_access_endtime.strftime("%Y-%m-%d") if web_access_endtime != None else web_access_endtime,
+                                (web_access_endtime-touei_endtime) if web_access_endtime != None else None,
+                                result_一括操作[0],
+                                result_一括操作[1],
                             ]
     result.drop_duplicates(inplace=True)
-    result.to_excel("output.xlsx",index=False)
-    logger.info("Kết quả: output.xlsx")
+    result.to_excel(outputFile,index=False)
+    logger.info(f"Kết quả: {outputFile}")
     
 if __name__ == '__main__':
-    main()
+    run(
+        outputFile="test_v2.xlsx",
+        timeout=5,
+        headless=False,
+    )
     
         
         

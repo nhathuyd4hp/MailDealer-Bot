@@ -277,14 +277,14 @@ class MailDealer:
             input.send_keys(案件ID)       
             time.sleep(1)
             button.click()
-            
+            time.sleep(2)
             # Check Result
             snackbar_div = self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='snackbar__msg']"))
             )
             if snackbar_div.text == "案件との関連付けを行いました。":
-                self.logger.info(f"Liên kết {案件ID}: 案件との関連付けを行いました。")
-                return True,"案件との関連付けを行いました。"
+                self.logger.info(f"Liên kết {案件ID}: {snackbar_div.text}")
+                return True,snackbar_div.text
             else:
                 self.logger.info(f"Liên kết {案件ID}: {snackbar_div.text}")
                 return False,snackbar_div.text

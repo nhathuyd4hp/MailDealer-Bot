@@ -150,7 +150,7 @@ class WebAccess:
                     tds = tr.find_elements(By.TAG_NAME,'td')
                     row = [td.text for td in tds][1:]
                     df.loc[len(df)] = row  
-                self.logger.info(f'✅ Lấy dữ liệu Building:{construction_id} thành công')
+                self.logger.info(f'✅ Lấy dữ liệu construction:{construction_id} thành công')
                 return df
         
         except Exception as e:

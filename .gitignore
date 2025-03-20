@@ -193,3 +193,4 @@ cython_debug/
 uv.lock
 # VSCode
 .vscode
+*.xlsx
