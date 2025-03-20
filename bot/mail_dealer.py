@@ -98,16 +98,16 @@ class MailDealer:
                     ),
                 )
                 self.logger.error(
-                    '❌ Đăng nhập thất bại! Kiểm tra thông tin đăng nhập.',
+                    '❌ Xác thực thất bại! Kiểm tra thông tin đăng nhập.',
                 )
                 return False
             except TimeoutException:
                 if self.browser.current_url.find("app") != -1:
-                    self.logger.info('✅ Đăng nhập thành công!')
+                    self.logger.info('✅ Xác thục thành công!')
                     return True
                 return False
         except Exception as e:
-            self.logger.error(f'❌ Đăng nhập thất bại! {e}.')
+            self.logger.error(f'❌ Xác thực thất bại! {e}.')
             return False
 
 
@@ -256,7 +256,7 @@ class MailDealer:
         except Exception as e:
             self.logger.error(f'❌ Dọc nội dung mail:{mail_id} ở {mail_box} thất bại: {e}')
     @login_required
-    def 一括操作(self,案件ID:any,このメールと同じ親番号のメールをすべて関連付ける:bool=False) -> bool | str:
+    def 一括操作(self,案件ID:any,このメールと同じ親番号のメールをすべて関連付ける:bool=False) -> tuple[bool,str]:
         try:
             popup = self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='pop-panel__content']"))
@@ -276,14 +276,19 @@ class MailDealer:
             input.clear()
             input.send_keys(案件ID)       
             time.sleep(1)
-            # button.click()
-            try:
-                snackbar_div = self.wait.until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='snackbar__msg']"))
-                )
-                return snackbar_div.text
-            except TimeoutException:
-                return True     
+            button.click()
+            
+            # Check Result
+            snackbar_div = self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR,"div[class='snackbar__msg']"))
+            )
+            if snackbar_div.text == "案件との関連付けを行いました。":
+                self.logger.info(f"Liên kết {案件ID}: 案件との関連付けを行いました。")
+                return True,"案件との関連付けを行いました。"
+            else:
+                self.logger.info(f"Liên kết {案件ID}: {snackbar_div.text}")
+                return False,snackbar_div.text
+            
         except TimeoutException as e:
             button = self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"button[title='一括操作']"))
@@ -297,11 +302,11 @@ class MailDealer:
                 このメールと同じ親番号のメールをすべて関連付ける=このメールと同じ親番号のメールをすべて関連付ける,
             )
         except NoSuchElementException as e:
-            self.logger.error(f'❌ Đánh dấu {案件ID} thất bại(NoSuchElementException): {e}')
-            return False
+            self.logger.error(f'❌ Liên kết {案件ID} thất bại: {e}')
+            return False,e
         except Exception as e:
-            self.logger.error(f'❌ Đánh dấu {案件ID} thất bại: {e}')
-            return False
+            self.logger.error(f'❌ Liên kết {案件ID} thất bại: {e}')
+            return False,e
         
 
 __all__ = [MailDealer]

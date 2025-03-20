@@ -51,10 +51,10 @@ class WebAccess:
             self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"button[class='btn login']"))
             ).click()
-            self.logger.info('✅ Đăng nhập thành công!')
+            self.logger.info('✅ Xác thực thành công!')
             return True
         except Exception as e:
-            self.logger.error(f'❌ Đăng nhập thất bại! {e}.')
+            self.logger.error(f'❌ Xác thực thất bại! {e}.')
             return False
     def __switch_tab(self,tab:str) -> bool:
         try:
@@ -103,7 +103,7 @@ class WebAccess:
                         (By.XPATH,"//td[text()='検索結果はありません']")
                     )
                 )
-                self.logger.warning(f'❌ Building:{construction_id} không có dữ liệu')
+                self.logger.warning(f'❌ Construction:{construction_id} không có dữ liệu')
                 return pd.DataFrame(columns=fields)
             except TimeoutException:
                 time.sleep(1)
