@@ -83,18 +83,18 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
     mailbox: pd.DataFrame = mail_dealer.mailbox(
         mail_box = MAIL_BOX,
         tab_name = TAB_NAME,
-    )   
+    )
+    if mailbox is None:
+        return
     # Chuyển cột 日付 thành datetime "%y/%m/%d %H:%M"
     mailbox["日付"] = pd.to_datetime(mailbox["日付"], format="%y/%m/%d %H:%M", errors="coerce")
     # Lọc các mail có cột '件名' bắt đầu bằng "【東栄住宅】 工程表更新のお知らせ"
     mailbox = mailbox[mailbox['件名'].str.startswith("【東栄住宅】 工程表更新のお知らせ", na=False)]
     # Chỉ xử lí các mail hôm nay
+    
     mailbox = mailbox[mailbox['日付'].dt.date == datetime.date.today()]  
     # Result
-    result = pd.DataFrame(
-        columns=['案件番号','物件名','CODE','NOUKI TOEUI','NOUKI WEBACCESS','NOUKI DIFF','RESULT',"NOTE"],
-        dtype=object,
-    )
+    data = []
     # Duyệt từng Mail
     for ID in mailbox['ID'].to_list():
         content = mail_dealer.read_mail(
@@ -113,11 +113,12 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
                     future_information = executor.submit(web_access.get_information, construction_id=construction_id, fields=FIELDS)
                     job_timeline = future_timeline.result()
                     web_access_information = future_information.result()
+                    web_access_information = web_access_information.sort_values(by="案件番号",ascending=True).reset_index(drop=True)
                     if job_timeline == None:
-                        result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở TOEUI"]
+                        data.append([None,None,construction_id,None,None,None,False,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở TOEUI"])
                         continue
                     if web_access_information.empty:
-                        result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở WEB ACCESS"]
+                        data.append([None,None,construction_id,None,None,None,False,"KHÔNG LẤY ĐƯỢC THÔNG TIN Ở WEB ACCESS"])
                         continue
                     if construction.get("construction").startswith("東京施工"):
                         # Nếu địa chỉ trong access (cột 配送先住所) không chứa 1 trong những giá trị này ignore_region thì result ghi: vùng không cần làm-> bot không làm các bước tiếp theo
@@ -125,7 +126,7 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
                         配送先住所:list = web_access_information['配送先住所'].to_list()
                         if not any(region in address for region in ignore_region for address in 配送先住所):
                             if web_access_information.empty:
-                                result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"IGNORE"]
+                                data.append([None,None,construction_id,None,None,None,False,"IGNORE"])
                             else:
                                 for index, row in web_access_information.iterrows():
                                     touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
@@ -134,14 +135,14 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
                                         web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
                                     except Exception:
                                         pass
-                                    result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,False,"IGNORE"]
+                                    data.append([row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,False,"IGNORE"])
                             continue
                     if construction.get("construction").startswith("神奈川施工"):
                         ignore_region = ['静岡県']
                         配送先住所:list = web_access_information['配送先住所'].to_list()
                         if not any(region in address for region in ignore_region for address in 配送先住所):
                             if web_access_information.empty:
-                                result.loc[len(result)] = [None,None,construction_id,None,None,None,False,"IGNORE"]
+                                data.append([None,None,construction_id,None,None,None,False,"IGNORE"])
                             else:
                                 for index, row in web_access_information.iterrows():
                                     touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
@@ -150,40 +151,51 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
                                         web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
                                     except Exception:
                                         pass
-                                    result.loc[len(result)] = [row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,False,"IGNORE"]
+                                    data.append([row['案件番号'],row['物件名'],construction_id,touei_endtime.strftime("%Y-%m-%d"),web_access_endtime.strftime("%Y-%m-%d"),0,False,"IGNORE"])
                             continue
-                    for 案件番号 in web_access_information['案件番号']:
+                    for index,案件番号 in enumerate(web_access_information['案件番号'].to_list()):
                         result_一括操作 = mail_dealer.一括操作(
                             案件ID=案件番号,
                             このメールと同じ親番号のメールをすべて関連付ける=True,
                         )
-                        for index, row in web_access_information.iterrows():
+                        row = web_access_information.loc[index]
+                        try:
                             touei_endtime:datetime.datetime = job_timeline.get(index+1).get("end")
-                            web_access_endtime = None
-                            try:
-                                web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
-                            except Exception:
-                                pass
-                            result.loc[len(result)] = [
-                                案件番号,
-                                row['物件名'],
-                                construction_id,
-                                touei_endtime.strftime("%Y-%m-%d"),
-                                web_access_endtime.strftime("%Y-%m-%d") if web_access_endtime != None else web_access_endtime,
-                                (web_access_endtime-touei_endtime) if web_access_endtime != None else None,
-                                result_一括操作[0],
-                                result_一括操作[1],
-                            ]
+                        except Exception:
+                            touei_endtime = None
+                            
+                        web_access_endtime = None
+                        try:
+                            web_access_endtime = datetime.datetime.strptime(row['確定納期'],"%y/%m/%d")
+                        except Exception:
+                            pass
+                        data.append([
+                            案件番号,
+                            row['物件名'],
+                            construction_id,
+                            touei_endtime.strftime("%Y-%m-%d") if touei_endtime != None else touei_endtime,
+                            web_access_endtime.strftime("%Y-%m-%d") if web_access_endtime != None else web_access_endtime,
+                            (web_access_endtime-touei_endtime) if web_access_endtime != None and touei_endtime != None else None,
+                            result_一括操作[0],
+                            result_一括操作[1],
+                        ])
+    result = pd.DataFrame(
+        columns=['案件番号','物件名','CODE','NOUKI TOEUI','NOUKI WEBACCESS','NOUKI DIFF','RESULT',"NOTE"],
+        data=data,
+        dtype=object,
+    )
     result.drop_duplicates(inplace=True)
     result.to_excel(outputFile,index=False)
     logger.info(f"Kết quả: {outputFile}")
     
+    del touei
+    del web_access
+    del mail_dealer
+    
 if __name__ == '__main__':
     run(
-        outputFile="test_v2.xlsx",
-        timeout=5,
+        outputFile=f"MailDealer_{datetime.date.today()}.xlsx",
         headless=False,
     )
-    
         
         

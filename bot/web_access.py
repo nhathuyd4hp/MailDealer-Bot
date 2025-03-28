@@ -2,10 +2,11 @@ import time
 import logging
 import pandas as pd
 from selenium import webdriver
+from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException,ElementClickInterceptedException
 from selenium.webdriver.common.keys import Keys
 
 class WebAccess:
@@ -37,7 +38,7 @@ class WebAccess:
         self.authenticated = self.__authentication(username, password)
         
     def __del__(self):
-        if hasattr(self,"browser"):
+        if hasattr(self,"browser") and isinstance(self.browser,WebDriver):
             self.browser.quit()
         
     def __authentication(self,username:str,password:str) -> bool:
@@ -57,6 +58,7 @@ class WebAccess:
         except Exception as e:
             self.logger.error(f'❌ Xác thực thất bại! {e}.')
             return False
+    
     def __switch_tab(self,tab:str) -> bool:
         try:
             a = self.wait.until(
@@ -67,6 +69,8 @@ class WebAccess:
             href = a.get_attribute("href")
             self.browser.get(href)
             return True
+        except ElementClickInterceptedException:
+            return self.__switch_tab(tab=tab)
         except Exception as e:
             self.logger.error(e)
             return False
@@ -113,8 +117,7 @@ class WebAccess:
                         (By.CSS_SELECTOR,"input[id='checkAll']")
                     )
                 ).click()
-                
-                
+
                 if not fields:
                     self.wait.until(
                         EC.presence_of_element_located(
@@ -152,7 +155,11 @@ class WebAccess:
                     df.loc[len(df)] = row  
                 self.logger.info(f'✅ Lấy dữ liệu construction:{construction_id} thành công')
                 return df
-        
+        except ElementClickInterceptedException:
+            return self.get_information(
+                construction_id=construction_id,
+                fields=fields,
+            )
         except Exception as e:
             self.logger.error(e)
             return pd.DataFrame(columns=fields)

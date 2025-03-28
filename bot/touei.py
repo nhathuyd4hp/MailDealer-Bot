@@ -2,6 +2,7 @@ import re
 import time
 import logging
 from selenium import webdriver
+from selenium.webdriver.chrome.webdriver import WebDriver
 from datetime import datetime,timedelta
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
@@ -50,7 +51,7 @@ class Touei:
         self.authenticated = self.__authentication(username, password)
         
     def __del__(self):
-        if hasattr(self,"browser"):
+        if hasattr(self,"browser") and isinstance(self.browser,WebDriver):
             self.browser.quit()
         
     def __authentication(self, username: str, password: str) -> bool:

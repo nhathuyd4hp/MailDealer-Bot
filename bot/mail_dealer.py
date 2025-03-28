@@ -4,8 +4,13 @@ from typing import Union
 import pandas as pd
 from functools import wraps
 from selenium import webdriver
-from selenium import webdriver
-from selenium.common.exceptions import TimeoutException,NoSuchElementException
+from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+    ElementClickInterceptedException
+)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
@@ -62,13 +67,13 @@ class MailDealer:
         self.authenticated = self.__authentication(username, password)
         
     def __del__(self):
-        if hasattr(self,"browser"):
+        if hasattr(self,"browser") and isinstance(self.browser,WebDriver):
             self.browser.quit()
         
     @switch_to_default_content
     def __authentication(self, username: str, password: str) -> bool:
         time.sleep(0.5)
-        self.browser.get('https://md29.maildealer.jp/')
+        self.browser.get('https://mds3310.maildealer.jp/')
         try:
             username_field = self.wait.until(
                 EC.presence_of_element_located((By.ID, 'fUName')),
@@ -103,7 +108,7 @@ class MailDealer:
                 return False
             except TimeoutException:
                 if self.browser.current_url.find("app") != -1:
-                    self.logger.info('✅ Xác thục thành công!')
+                    self.logger.info('✅ Xác thực thành công!')
                     return True
                 return False
         except Exception as e:
@@ -165,7 +170,8 @@ class MailDealer:
     @switch_to_default_content
     def mailbox(self, mail_box: str, tab_name: Union[str, None] = None) -> pd.DataFrame | None:
         try:
-            self.__open_mail_box(mail_box, tab_name)
+            if not self.__open_mail_box(mail_box, tab_name):
+                return None
             time.sleep(2)
             if not self.wait.until(
                 EC.frame_to_be_available_and_switch_to_it(
@@ -211,6 +217,11 @@ class MailDealer:
                     df.loc[len(df)] = row                   
                 self.logger.info(f'✅ Lấy hộp thư: {mail_box}, tab: {tab_name}: thành công')
                 return df
+        except StaleElementReferenceException:
+            return self.mailbox(
+                mail_box=mail_box,
+                tab_name=tab_name,
+            )
         except Exception as e:    
             self.logger.error(f'❌ Không thể lấy được danh sách mail: {mail_box}, tab: {tab_name}: {e}')
             return None
@@ -255,6 +266,7 @@ class MailDealer:
             return content
         except Exception as e:
             self.logger.error(f'❌ Dọc nội dung mail:{mail_id} ở {mail_box} thất bại: {e}')
+            
     @login_required
     def 一括操作(self,案件ID:any,このメールと同じ親番号のメールをすべて関連付ける:bool=False) -> tuple[bool,str]:
         try:
@@ -288,7 +300,6 @@ class MailDealer:
             else:
                 self.logger.info(f"Liên kết {案件ID}: {snackbar_div.text}")
                 return False,snackbar_div.text
-            
         except TimeoutException as e:
             button = self.wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR,"button[title='一括操作']"))
@@ -301,11 +312,21 @@ class MailDealer:
                 案件ID=案件ID,
                 このメールと同じ親番号のメールをすべて関連付ける=このメールと同じ親番号のメールをすべて関連付ける,
             )
+        except StaleElementReferenceException:
+            return self.一括操作(
+                    案件ID=案件ID,
+                    このメールと同じ親番号のメールをすべて関連付ける=このメールと同じ親番号のメールをすべて関連付ける,
+                )
+        except ElementClickInterceptedException:
+            return self.一括操作(
+                案件ID=案件ID,
+                このメールと同じ親番号のメールをすべて関連付ける=このメールと同じ親番号のメールをすべて関連付ける,
+            )
         except NoSuchElementException as e:
-            self.logger.error(f'❌ Liên kết {案件ID} thất bại: {e}')
+            self.logger.error(f'❌ Liên kết {案件ID} thất bại: {e.msg.split("(Session info")[0].strip()}')
             return False,e
         except Exception as e:
-            self.logger.error(f'❌ Liên kết {案件ID} thất bại: {e}')
+            self.logger.error(f'❌ Liên kết {案件ID} thất bại: {e.msg.split("(Session info")[0].strip()}')
             return False,e
         
 
