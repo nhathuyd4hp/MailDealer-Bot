@@ -231,7 +231,7 @@ class MailDealer:
     def read_mail(self, mail_box: str,mail_id:str,tab_name:str=None) -> str:
         try:
             content = ""
-            if not self.browser.current_url.startswith('https://md29.maildealer.jp/app/'):
+            if not self.browser.current_url.startswith('https://mds3310.maildealer.jp/app/'):
                 self.__authentication(self.username, self.password)
             self.__open_mail_box(
                 mail_box=mail_box,
