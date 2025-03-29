@@ -90,10 +90,6 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
     mailbox["日付"] = pd.to_datetime(mailbox["日付"], format="%y/%m/%d %H:%M", errors="coerce")
     # Lọc các mail có cột '件名' bắt đầu bằng "【東栄住宅】 工程表更新のお知らせ"
     mailbox = mailbox[mailbox['件名'].str.startswith("【東栄住宅】 工程表更新のお知らせ", na=False)]
-    # Chỉ xử lí các mail hôm nay
-    
-    mailbox = mailbox[mailbox['日付'].dt.date == datetime.date.today()]  
-    # Result
     data = []
     # Duyệt từng Mail
     for ID in mailbox['ID'].to_list():
