@@ -39,6 +39,7 @@ class Touei:
         options.add_argument('--disable-logging')
         options.add_argument('--log-level=3')  #
         options.add_argument('--silent')
+        options.add_argument("--incognito")  
         options.add_experimental_option('excludeSwitches', ['enable-logging'])
         # Attribute
         self.logger = logging.getLogger(logger_name)

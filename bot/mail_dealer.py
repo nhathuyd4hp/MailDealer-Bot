@@ -222,6 +222,11 @@ class MailDealer:
                 mail_box=mail_box,
                 tab_name=tab_name,
             )
+        except ValueError as e:
+            return self.mailbox(
+                mail_box=mail_box,
+                tab_name=tab_name,
+            )
         except Exception as e:    
             self.logger.error(f'❌ Không thể lấy được danh sách mail: {mail_box}, tab: {tab_name}: {e}')
             return None

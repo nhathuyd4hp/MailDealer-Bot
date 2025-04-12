@@ -48,7 +48,7 @@ def process_schedu_email_content(content:str) -> list[str]:
         buildings.append(building)
     return buildings
 
-TAB_NAME = "新着"
+TAB_NAME = None # "新着"
 MAIL_BOX = '専用アドレス・飯田GH/≪ベトナム納期≫東栄(FAX・メール)'
 TASK = "鋼製野縁"
 FIELDS = ['確定納期', '案件番号', '物件名','配送先住所']
