@@ -42,22 +42,30 @@ class WebAccess:
             self.browser.quit()
         
     def __authentication(self,username:str,password:str) -> bool:
+        self.browser.get("https://webaccess.nsk-cad.com")
+        self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+        ).send_keys(username)
+        self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password']"))
+        ).send_keys(password)
+        self.wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "button[class='btn login']")
+            )
+        ).click()
         try:
-            self.browser.get("https://webaccess.nsk-cad.com")
-            self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR,"input[type='text']"))
-            ).send_keys(username)
-            self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR,"input[type='password']"))
-            ).send_keys(password)
-            self.wait.until(
-                EC.presence_of_element_located((By.CSS_SELECTOR,"button[class='btn login']"))
-            ).click()
-            self.logger.info('✅ Xác thực thành công!')
-            return True
-        except Exception as e:
-            self.logger.error(f'❌ Xác thực thất bại! {e}.')
+            error_box = self.wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "div[id='f-error-box']")
+                )
+            )
+            data = error_box.find_element(By.CSS_SELECTOR, "div[class='data']")
+            self.logger.info(f"❌ Xác thực thất bại!: {data.text}")
             return False
+        except TimeoutException:
+            self.logger.info("✅ Xác thực thành công!")
+            return True
     
     def __switch_tab(self,tab:str) -> bool:
         try:

@@ -55,6 +55,7 @@ FIELDS = ['確定納期', '案件番号', '物件名','配送先住所']
 PROCESS_CONSTRUCTIONS = ["仙台施工","郡山施工","浜松施工","東海施工","関西施工","岡山施工","広島施工","福岡施工","熊本施工","東京施工","神奈川施工"]
 
 def run(outputFile:str,timeout:int=10,headless:bool=False):
+    logger = logging.getLogger("Main")
     touei = Touei(
         username="c0032",
         password="nsk159753",
@@ -63,7 +64,7 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
         logger_name="Touei",
     ) 
     web_access = WebAccess(
-        username="2909",
+        username="hanh0704",
         password="159753",
         headless=headless,
         timeout=timeout,
@@ -76,10 +77,9 @@ def run(outputFile:str,timeout:int=10,headless:bool=False):
         timeout=timeout,
         logger_name="MailDealer",
     )
-
-    
-    logger = logging.getLogger("Main")
-    
+    if not (mail_dealer.authenticated and touei.authenticated and web_access.authenticated):
+        logger.error("❌ Kiểm tra thông tin xác thực")
+        return
     mailbox: pd.DataFrame = mail_dealer.mailbox(
         mail_box = MAIL_BOX,
         tab_name = TAB_NAME,
